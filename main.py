@@ -9,10 +9,13 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from utils import AMAZON_BEHAVIOR_FUSION_ALPHA, AMAZON_LBP_MAX_ITERS, AMAZON_POTTS_BETA
+
+
 
 
 class TwoLayerMLP(nn.Module):
-
+   
 
     def __init__(self, in_dim: int, hidden_dim: int, out_dim: int):
         super().__init__()
@@ -56,7 +59,6 @@ def contrastive_loss_eq8(
     temperature: float,
     num_negatives: int = 100,
 ) -> torch.Tensor:
-
     
     if temperature <= 0:
         raise ValueError("temperature tau must be > 0")
@@ -180,7 +182,7 @@ class DualChannelRelationWeights(nn.Module):
 
 @dataclass
 class EdgeCfg:
-    beta: float = 0.3
+    beta: float = AMAZON_POTTS_BETA
 
 
 class PottsEdgePotentialsAndLoss(nn.Module):
@@ -220,7 +222,7 @@ class PottsEdgePotentialsAndLoss(nn.Module):
 
 
 class LoopyBeliefPropagation(nn.Module):
-    def __init__(self, num_iters: int = 50, eps: float = 1e-8):
+    def __init__(self, num_iters: int = AMAZON_LBP_MAX_ITERS, eps: float = 1e-8):
         super().__init__()
         self.num_iters = num_iters
         self.eps = eps
@@ -285,24 +287,22 @@ def build_directed_from_undirected(edge_index_undirected: torch.Tensor) -> torch
 
 
 
-
 @dataclass
 class PaperGMRFConfig:
     dual: DualBranchConfig
     node: NodeCfg
     relation: RelationCfg
     edge: EdgeCfg
-    lbp_iters: int = 50
+    lbp_iters: int = AMAZON_LBP_MAX_ITERS
     lbp_eps: float = 1e-8
-    
+    # Paper reports tol 1e-3 for LBP; current LoopyBeliefPropagation uses fixed iters only.
     lbp_convergence_tol: float = 1e-3
-   
+    # Eq.(20) weights (used in training script; not applied inside PaperGMRF.forward)
     lambda_edge: float = 0.3
     lambda_contrast: float = 0.6
 
 
 class PaperGMRF(nn.Module):
-   
 
     def __init__(self, cfg: PaperGMRFConfig):
         super().__init__()
@@ -352,5 +352,4 @@ class PaperGMRF(nn.Module):
             "refined_prob": refined_prob,
             "edge_index_dir": edge_dir,
         }
-
 
