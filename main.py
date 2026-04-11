@@ -1,4 +1,5 @@
 
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -11,7 +12,7 @@ import torch.nn.functional as F
 
 
 class TwoLayerMLP(nn.Module):
-    """f(x) = W_2 ReLU(W_1 x + b_1) + b_2"""
+
 
     def __init__(self, in_dim: int, hidden_dim: int, out_dim: int):
         super().__init__()
@@ -28,7 +29,7 @@ class DualBranchConfig:
     pre_dim: int
     hidden_dim: int
     proj_dim: int
-    temperature: float
+    temperature: float = 0.10
 
 
 class DualBranchUserEncoder(nn.Module):
@@ -56,6 +57,7 @@ def contrastive_loss_eq8(
     num_negatives: int = 100,
 ) -> torch.Tensor:
 
+    
     if temperature <= 0:
         raise ValueError("temperature tau must be > 0")
 
@@ -90,6 +92,8 @@ def contrastive_loss_eq8(
     return F.cross_entropy(logits, target)
 
 
+
+
 @dataclass
 class NodeCfg:
     proj_dim: int
@@ -109,12 +113,14 @@ class NodePotentialLearning(nn.Module):
         return {"p": p, "phi": phi, "logits": logits}
 
 
+
+
 @dataclass
 class RelationCfg:
     proj_dim: int
     gat_dim: int
     negative_slope: float = 0.2
-    tau_mrf: float = 1.0
+    tau_mrf: float = 0.2
 
 
 class DualChannelRelationWeights(nn.Module):
@@ -170,9 +176,11 @@ class DualChannelRelationWeights(nn.Module):
         return {"alpha_ij": alpha_ij}
 
 
+
+
 @dataclass
 class EdgeCfg:
-    beta: float
+    beta: float = 0.3
 
 
 class PottsEdgePotentialsAndLoss(nn.Module):
@@ -210,8 +218,9 @@ class PottsEdgePotentialsAndLoss(nn.Module):
 
 
 
+
 class LoopyBeliefPropagation(nn.Module):
-    def __init__(self, num_iters: int = 10, eps: float = 1e-8):
+    def __init__(self, num_iters: int = 50, eps: float = 1e-8):
         super().__init__()
         self.num_iters = num_iters
         self.eps = eps
@@ -275,21 +284,25 @@ def build_directed_from_undirected(edge_index_undirected: torch.Tensor) -> torch
 
 
 
+
+
 @dataclass
 class PaperGMRFConfig:
     dual: DualBranchConfig
     node: NodeCfg
     relation: RelationCfg
     edge: EdgeCfg
-    lbp_iters: int = 10
+    lbp_iters: int = 50
     lbp_eps: float = 1e-8
+    
+    lbp_convergence_tol: float = 1e-3
+   
+    lambda_edge: float = 0.3
+    lambda_contrast: float = 0.6
 
 
 class PaperGMRF(nn.Module):
-    """
-    Requires: DualBranchConfig.proj_dim == NodeCfg.proj_dim == RelationCfg.proj_dim.
-    Node head uses fused z (Eq.7); relation uses z_beh, z_pref (Eq.9-14).
-    """
+   
 
     def __init__(self, cfg: PaperGMRFConfig):
         super().__init__()
