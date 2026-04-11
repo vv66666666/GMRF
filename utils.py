@@ -1,10 +1,19 @@
 
+
 from __future__ import annotations
-from typing import Dict
-import torch
+
 from collections import Counter
-from typing import Iterable, List, Sequence, Tuple, Union
+from typing import Dict, Sequence, Tuple, Union
+
 import numpy as np
+import torch
+
+
+
+AMAZON_BEHAVIOR_FUSION_ALPHA: float = 0.5
+AMAZON_POTTS_BETA: float = 0.3
+AMAZON_LBP_MAX_ITERS: int = 50
+
 
 
 TOPICS: Tuple[str, ...] = (
@@ -56,6 +65,7 @@ def dominant_and_rare_pairs(
 
 
 
+
 def concat_temporal_features(n_i1_to_n_i5: Sequence[float]) -> np.ndarray:
     arr = np.asarray(n_i1_to_n_i5, dtype=np.float64).reshape(-1)
     if arr.shape[0] != 5:
@@ -73,7 +83,7 @@ def concat_rating_features(n_i6_to_n_i10: Sequence[float]) -> np.ndarray:
 def weighted_concat_behavior(
     x_time: Union[np.ndarray, torch.Tensor],
     x_rating: Union[np.ndarray, torch.Tensor],
-    alpha: float,
+    alpha: float = AMAZON_BEHAVIOR_FUSION_ALPHA,
 ) -> Union[np.ndarray, torch.Tensor]:
 
     if not (0.0 <= alpha <= 1.0):
@@ -102,27 +112,28 @@ def zscore_normalize_1d(x: np.ndarray, mean: np.ndarray, std: np.ndarray, eps: f
 
 
 def numpy_to_torch_f32(x: np.ndarray, device: torch.device | None = None) -> torch.Tensor:
-    return torch.from_numpy(np.asa
+    return torch.from_numpy(np.asarray(x, dtype=np.float32)).to(device=device)
+
+
+
+
 
 def build_directed_edges_from_undirected(edge_index_undirected: torch.Tensor) -> torch.Tensor:
-
-  
     src = edge_index_undirected[0]
     dst = edge_index_undirected[1]
     rev = torch.stack([dst, src], dim=0)
     return torch.cat([edge_index_undirected, rev], dim=1)
 
 
-def build_potts_edge_potentials(edge_strength: torch.Tensor, beta: float) -> Dict[str, torch.Tensor]:
-
-  
+def build_potts_edge_potentials(
+    edge_strength: torch.Tensor,
+    beta: float = AMAZON_POTTS_BETA,
+) -> Dict[str, torch.Tensor]:
     p_same = torch.sigmoid(beta * edge_strength)
-
     same = torch.exp(beta * edge_strength)
     psi = torch.ones(edge_strength.size(0), 2, 2, device=edge_strength.device, dtype=edge_strength.dtype)
     psi[:, 0, 0] = same
     psi[:, 1, 1] = same
-
     return {"psi_undirected": psi, "p_same": p_same}
 
 
@@ -134,7 +145,6 @@ def edge_consistency_loss(
     eps: float = 1e-8,
 ) -> torch.Tensor:
 
-  
     src = edge_index_undirected[0]
     dst = edge_index_undirected[1]
     edge_mask = labeled_mask[src] & labeled_mask[dst]
@@ -144,19 +154,16 @@ def edge_consistency_loss(
 
     t_ij = (y[src[edge_mask]] == y[dst[edge_mask]]).float()
     p = p_same[edge_mask].clamp(eps, 1.0 - eps)
-
     return -(t_ij * torch.log(p) + (1.0 - t_ij) * torch.log(1.0 - p)).sum()
 
 
 def loopy_belief_propagation_binary(
-    node_potential: torch.Tensor,    
-    edge_potential: torch.Tensor,      
+    node_potential: torch.Tensor,
+    edge_potential: torch.Tensor,
     edge_index_directed: torch.Tensor,
-    num_iters: int,
+    num_iters: int = AMAZON_LBP_MAX_ITERS,
     eps: float = 1e-8,
 ) -> Dict[str, torch.Tensor]:
-
-
     src = edge_index_directed[0]
     dst = edge_index_directed[1]
     e_dir = src.numel()
@@ -175,14 +182,14 @@ def loopy_belief_propagation_binary(
             i = int(src[e])
             j = int(dst[e])
 
-            prod = node_potential[i].clone() 
-            for e_in in incoming[i]:        
+            prod = node_potential[i].clone()
+            for e_in in incoming[i]:
                 k = int(src[e_in])
                 if k == j:
                     continue
                 prod = prod * messages[e_in]
 
-            m = torch.zeros(2, device=node_potential.device, dtype=node_potential.dtype) 
+            m = torch.zeros(2, device=node_potential.device, dtype=node_potential.dtype)
             for y_j in range(2):
                 val = 0.0
                 for y_i in range(2):
