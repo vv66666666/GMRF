@@ -1,10 +1,108 @@
 
 from __future__ import annotations
-
 from typing import Dict
-
 import torch
+from collections import Counter
+from typing import Iterable, List, Sequence, Tuple, Union
+import numpy as np
 
+
+TOPICS: Tuple[str, ...] = (
+    "design",
+    "quality",
+    "price",
+    "performance",
+    "customer service",
+)
+
+EMOTIONS: Tuple[str, ...] = (
+    "joy",
+    "sadness",
+    "anger",
+    "fear",
+    "trust",
+    "disgust",
+    "surprise",
+    "anticipation",
+)
+
+
+def preference_template(
+    dominant: Tuple[str, str],
+    rare: Tuple[str, str],
+) -> str:
+    t_max, e_max = dominant
+    t_min, e_min = rare
+    return (
+        f"The user often expresses {e_max} about {t_max}, "
+        f"while rarely expressing {e_min} about {t_min}."
+    )
+
+
+def dominant_and_rare_pairs(
+    pairs: Sequence[Tuple[str, str]],
+) -> Tuple[Tuple[str, str], Tuple[str, str]]:
+    if not pairs:
+        raise ValueError("pairs must be non-empty")
+
+    cnt = Counter(pairs)
+    items = sorted(cnt.items(), key=lambda kv: (-kv[1], str(kv[0])))
+    dominant = items[0][0]
+
+    items_rare = sorted(cnt.items(), key=lambda kv: (kv[1], str(kv[0])))
+    rare = items_rare[0][0]
+
+    return dominant, rare
+
+
+
+def concat_temporal_features(n_i1_to_n_i5: Sequence[float]) -> np.ndarray:
+    arr = np.asarray(n_i1_to_n_i5, dtype=np.float64).reshape(-1)
+    if arr.shape[0] != 5:
+        raise ValueError("temporal block must have 5 scalars")
+    return arr
+
+
+def concat_rating_features(n_i6_to_n_i10: Sequence[float]) -> np.ndarray:
+    arr = np.asarray(n_i6_to_n_i10, dtype=np.float64).reshape(-1)
+    if arr.shape[0] != 5:
+        raise ValueError("rating block must have 5 scalars")
+    return arr
+
+
+def weighted_concat_behavior(
+    x_time: Union[np.ndarray, torch.Tensor],
+    x_rating: Union[np.ndarray, torch.Tensor],
+    alpha: float,
+) -> Union[np.ndarray, torch.Tensor]:
+
+    if not (0.0 <= alpha <= 1.0):
+        raise ValueError("alpha must be in [0, 1]")
+
+    if isinstance(x_time, torch.Tensor):
+        a = torch.as_tensor(alpha, dtype=x_time.dtype, device=x_time.device)
+        left = a * x_time
+        right = (1.0 - a) * x_rating
+        return torch.cat([left, right], dim=-1)
+
+    a = float(alpha)
+    left = a * np.asarray(x_time, dtype=np.float64)
+    right = (1.0 - a) * np.asarray(x_rating, dtype=np.float64)
+    return np.concatenate([left, right], axis=-1)
+
+
+def minmax_normalize_1d(x: np.ndarray, xmin: np.ndarray, xmax: np.ndarray, eps: float = 1e-8) -> np.ndarray:
+    x = np.asarray(x, dtype=np.float64)
+    return (x - xmin) / (np.maximum(xmax - xmin, eps))
+
+
+def zscore_normalize_1d(x: np.ndarray, mean: np.ndarray, std: np.ndarray, eps: float = 1e-8) -> np.ndarray:
+    x = np.asarray(x, dtype=np.float64)
+    return (x - mean) / (np.maximum(std, eps))
+
+
+def numpy_to_torch_f32(x: np.ndarray, device: torch.device | None = None) -> torch.Tensor:
+    return torch.from_numpy(np.asa
 
 def build_directed_edges_from_undirected(edge_index_undirected: torch.Tensor) -> torch.Tensor:
 
